@@ -43,13 +43,18 @@ class Session(requests.Session):
 
         if self.proxy_pool is not None:
             proxy = self.proxy_pool.get_next(protocol=self._url_scheme(url))
-            self.logger.debug(f"Using proxy: {proxy.format()}")
-            try:
-                response = super().request(method, url, *args, proxies=proxy.format(), **kwargs)
-                self.proxy_pool.increase_weight(proxy)
-            except requests.RequestException:
-                self.proxy_pool.decrease_weight(proxy)
-                raise
+            # An empty pool yields None: fall back to a direct connection
+            # instead of dereferencing it and raising AttributeError.
+            if proxy is None:
+                response = super().request(method, url, *args, **kwargs)
+            else:
+                self.logger.debug(f"Using proxy: {proxy.format()}")
+                try:
+                    response = super().request(method, url, *args, proxies=proxy.format(), **kwargs)
+                    self.proxy_pool.increase_weight(proxy)
+                except requests.RequestException:
+                    self.proxy_pool.decrease_weight(proxy)
+                    raise
         else:
             response = super().request(method, url, *args, **kwargs)
 
